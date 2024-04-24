@@ -13,7 +13,7 @@ Before running the code, please ensure that you have the following requirements 
 
 1. You will need to download the CIFAR-10 dataset. The dataset can be downloaded from the following link: [CIFAR-10 Dataset](https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz).
 
-2. Once downloaded, extract the dataset into the `./data` folder located in the project's root directory.
+2. Once downloaded, extract the dataset into the `./datas` folder located in the project's root directory.
 
 ## Training
 
