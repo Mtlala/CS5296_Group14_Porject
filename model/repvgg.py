@@ -5,6 +5,9 @@ import copy
 from se_block import SEBlock
 
 def conv_bn(in_channels, out_channels, kernel_size, stride, padding, groups=1):
+    """
+    Utility function to create a convolutional layer followed by batch normalization.
+    """
     result = nn.Sequential()
     result.add_module('conv', nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
                                                   kernel_size=kernel_size, stride=stride, padding=padding, groups=groups, bias=False))
@@ -12,47 +15,73 @@ def conv_bn(in_channels, out_channels, kernel_size, stride, padding, groups=1):
     return result
 
 class RepVGGBlock(nn.Module):
+"""
+Implementation of a single building block of the RepVGG network.
+"""
 
-    def __init__(self, in_channels, out_channels, kernel_size,
-                 stride=1, padding=0, dilation=1, groups=1, padding_mode='zeros', deploy=False, use_se=False):
-        super(RepVGGBlock, self).__init__()
-        self.deploy = deploy
-        self.groups = groups
-        self.in_channels = in_channels
+def __init__(self, in_channels, out_channels, kernel_size,
+             stride=1, padding=0, dilation=1, groups=1, padding_mode='zeros', deploy=False, use_se=False):
+    """
+    Initializes the RepVGGBlock.
 
-        assert kernel_size == 3
-        assert padding == 1
-        padding_11 = padding - kernel_size // 2
+    Args:
+        in_channels (int): Number of input channels.
+        out_channels (int): Number of output channels.
+        kernel_size (int): Size of the convolutional kernel.
+        stride (int, optional): Stride of the convolutional operation. Defaults to 1.
+        padding (int, optional): Padding size. Defaults to 0.
+        dilation (int, optional): Dilation rate of the convolution. Defaults to 1.
+        groups (int, optional): Number of groups for grouped convolution. Defaults to 1.
+        padding_mode (str, optional): Padding mode. Defaults to 'zeros'.
+        deploy (bool, optional): Whether the block is used in deployment mode. Defaults to False.
+        use_se (bool, optional): Whether to use Squeeze-and-Excitation block. Defaults to False.
+    """
+    super(RepVGGBlock, self).__init__()
+    self.deploy = deploy
+    self.groups = groups
+    self.in_channels = in_channels
 
-        self.nonlinearity = nn.ReLU()
+    assert kernel_size == 3
+    assert padding == 1
+    padding_11 = padding - kernel_size // 2
 
-        if use_se:
-            self.se = SEBlock(out_channels, internal_neurons=out_channels // 16)
-        # Identity同等映射
-        else:
-            self.se = nn.Identity()
+    self.nonlinearity = nn.ReLU()
 
-        if deploy:
-            self.rbr_reparam = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride,
-                                      padding=padding, dilation=dilation, groups=groups, bias=True, padding_mode=padding_mode)
+    if use_se:
+        self.se = SEBlock(out_channels, internal_neurons=out_channels // 16)
+    else:
+        self.se = nn.Identity()
 
-        else:
-            self.rbr_identity = nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
-            self.rbr_dense = conv_bn(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups)
-            self.rbr_1x1 = conv_bn(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=stride, padding=padding_11, groups=groups)
-            print('RepVGG Block, identity = ', self.rbr_identity)
+    if deploy:
+        self.rbr_reparam = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride,
+                                  padding=padding, dilation=dilation, groups=groups, bias=True, padding_mode=padding_mode)
+
+    else:
+        self.rbr_identity = nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
+        self.rbr_dense = conv_bn(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups)
+        self.rbr_1x1 = conv_bn(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=stride, padding=padding_11, groups=groups)
+        print('RepVGG Block, identity = ', self.rbr_identity)
 
 
-    def forward(self, inputs):
-        if hasattr(self, 'rbr_reparam'):
-            return self.nonlinearity(self.se(self.rbr_reparam(inputs)))
+def forward(self, inputs):
+    """
+    Forward pass of the RepVGGBlock.
 
-        if self.rbr_identity is None:
-            id_out = 0
-        else:
-            id_out = self.rbr_identity(inputs)
+    Args:
+        inputs (torch.Tensor): Input tensor.
 
-        return self.nonlinearity(self.se(self.rbr_dense(inputs) + self.rbr_1x1(inputs) + id_out))
+    Returns:
+        torch.Tensor: Output tensor.
+    """
+    if hasattr(self, 'rbr_reparam'):
+        return self.nonlinearity(self.se(self.rbr_reparam(inputs)))
+
+    if self.rbr_identity is None:
+        id_out = 0
+    else:
+        id_out = self.rbr_identity(inputs)
+
+    return self.nonlinearity(self.se(self.rbr_dense(inputs) + self.rbr_1x1(inputs) + id_out))
 
 
     #   Optional. This improves the accuracy and facilitates quantization.
