@@ -24,7 +24,10 @@ To train a model using this program, run the following command:
 ```bash
 python train.py --model your_model --nodes node_num --epoch your_epoch --mode your_mode
 ```
-Or you can run the train.sh file to train a VGG11 model with 4 nodes for 20 epochs using Distributed Data Parallel (DDP).
+Or you can run the train.sh with parameter model, nodes, epoch, mode like
+```bash
+./train.sh VGG11 4 20 DDP
+```
 
 ### Argument Descriptions
 

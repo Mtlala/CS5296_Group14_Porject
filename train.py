@@ -26,13 +26,16 @@ def partition_dataset(rank, size, normalize):
             transforms.ToTensor(),
             normalize,
             ])
+    # 加载CIFAR10数据集
     dataset = datasets.CIFAR10(root="./datas", train=True,
                                 transform=transform_train)
 
     bsz = int(batch_size / float(size))
     partition_sizes = [1.0 / size for _ in range(size)]
+    # 数据集分区
     partition = DataPartitioner(dataset, partition_sizes)
     partition = partition.use(rank)
+    # 创建用于训练的数据加载器
     train_set = torch.utils.data.DataLoader(partition,
                                          batch_size=bsz,
                                          num_workers=2,
