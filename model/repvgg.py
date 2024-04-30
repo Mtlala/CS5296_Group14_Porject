@@ -2,37 +2,8 @@ import torch.nn as nn
 import numpy as np
 import torch
 import copy
-import numpy as np
-import cv2
-import torch
-from torchvision import transforms
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import os
-from torch.autograd import Variable
+from se_block import SEBlock
 
-import sys
-sys.path.append('/content/utils/transforms')
-
-class SEBlock(nn.Module):
-
-    def __init__(self, input_channels, internal_neurons):
-        super(SEBlock, self).__init__()
-        self.down = nn.Conv2d(in_channels=input_channels, out_channels=internal_neurons, kernel_size=1, stride=1, bias=True)
-        self.up = nn.Conv2d(in_channels=internal_neurons, out_channels=input_channels, kernel_size=1, stride=1, bias=True)
-        self.input_channels = input_channels
-
-    def forward(self, inputs):
-        x = F.avg_pool2d(inputs, kernel_size=inputs.size(3))
-        x = self.down(x)
-        x = F.relu(x)
-        x = self.up(x)
-        x = torch.sigmoid(x)
-        x = x.view(-1, self.input_channels, 1, 1)
-        return inputs * x
-
-# Convolution layer plus a BN layer
 def conv_bn(in_channels, out_channels, kernel_size, stride, padding, groups=1):
     result = nn.Sequential()
     result.add_module('conv', nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
@@ -57,7 +28,7 @@ class RepVGGBlock(nn.Module):
 
         if use_se:
             self.se = SEBlock(out_channels, internal_neurons=out_channels // 16)
-        # Identity equivalent mapping
+        # Identity同等映射
         else:
             self.se = nn.Identity()
 
@@ -103,9 +74,11 @@ class RepVGGBlock(nn.Module):
         l2_loss_eq_kernel = (eq_kernel ** 2 / (t3 ** 2 + t1 ** 2)).sum()        # Normalize for an L2 coefficient comparable to regular L2.
         return l2_loss_eq_kernel + l2_loss_circle
 
+
+
 #   This func derives the equivalent kernel and bias in a DIFFERENTIABLE way.
 #   You can get the equivalent kernel and bias at any time and do whatever you want,
-#   for example, apply some penalties or constraints during training, just like you do to the other models.
+    #   for example, apply some penalties or constraints during training, just like you do to the other models.
 #   May be useful for quantization or pruning.
     def get_equivalent_kernel_bias(self):
         kernel3x3, bias3x3 = self._fuse_bn_tensor(self.rbr_dense)
@@ -166,6 +139,8 @@ class RepVGGBlock(nn.Module):
             self.__delattr__('id_tensor')
         self.deploy = True
 
+
+
 class RepVGG(nn.Module):
 
     def __init__(self, num_blocks, num_classes=1000, width_multiplier=None, override_groups_map=None, deploy=False, use_se=False):
@@ -192,7 +167,6 @@ class RepVGG(nn.Module):
 
 
     def _make_stage(self, planes, num_blocks, stride):
-        # Construct a list of steps to place at this stage
         strides = [stride] + [1]*(num_blocks-1)
         blocks = []
         for stride in strides:
@@ -214,6 +188,7 @@ class RepVGG(nn.Module):
         out = self.linear(out)
         return out
 
+
 optional_groupwise_layers = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26]
 g2_map = {l: 2 for l in optional_groupwise_layers}
 g4_map = {l: 4 for l in optional_groupwise_layers}
@@ -231,9 +206,11 @@ def create_RepVGG_A1(deploy=False):
     return RepVGG(num_blocks=[2, 4, 14, 1], num_classes=1000,
                   width_multiplier=[1, 1, 1, 2.5], override_groups_map=None, deploy=deploy)
 
+
 def create_RepVGG_A2(deploy=False):
     return RepVGG(num_blocks=[2, 4, 14, 1], num_classes=1000,
                   width_multiplier=[1.5, 1.5, 1.5, 2.75], override_groups_map=None, deploy=deploy)
+
 
 def create_RepVGG_B0(deploy=False):
     return RepVGG(num_blocks=[4, 6, 16, 1], num_classes=1000,
@@ -251,6 +228,7 @@ def create_RepVGG_B1g4(deploy=False):
     return RepVGG(num_blocks=[4, 6, 16, 1], num_classes=1000,
                   width_multiplier=[2, 2, 2, 4], override_groups_map=g4_map, deploy=deploy)
 
+
 def create_RepVGG_B2(deploy=False):
     return RepVGG(num_blocks=[4, 6, 16, 1], num_classes=1000,
                   width_multiplier=[2.5, 2.5, 2.5, 5], override_groups_map=None, deploy=deploy)
@@ -262,6 +240,7 @@ def create_RepVGG_B2g2(deploy=False):
 def create_RepVGG_B2g4(deploy=False):
     return RepVGG(num_blocks=[4, 6, 16, 1], num_classes=1000,
                   width_multiplier=[2.5, 2.5, 2.5, 5], override_groups_map=g4_map, deploy=deploy)
+
 
 def create_RepVGG_B3(deploy=False):
     return RepVGG(num_blocks=[4, 6, 16, 1], num_classes=1000,
@@ -279,22 +258,43 @@ def create_RepVGG_D2se(deploy=False):
     return RepVGG(num_blocks=[8, 14, 24, 1], num_classes=1000,
                   width_multiplier=[2.5, 2.5, 2.5, 5], override_groups_map=None, deploy=deploy, use_se=True)
 
-func_dict = {
-    'RepVGG-A0': create_RepVGG_A0,
-    'RepVGG-A1': create_RepVGG_A1,
-    'RepVGG-A2': create_RepVGG_A2,
-    'RepVGG-B0': create_RepVGG_B0,
-    'RepVGG-B1': create_RepVGG_B1,
-    'RepVGG-B1g2': create_RepVGG_B1g2,
-    'RepVGG-B1g4': create_RepVGG_B1g4,
-    'RepVGG-B2': create_RepVGG_B2,
-    'RepVGG-B2g2': create_RepVGG_B2g2,
-    'RepVGG-B2g4': create_RepVGG_B2g4,
-    'RepVGG-B3': create_RepVGG_B3,
-    'RepVGG-B3g2': create_RepVGG_B3g2,
-    'RepVGG-B3g4': create_RepVGG_B3g4,
-    'RepVGG-D2se': create_RepVGG_D2se,
-}
 
+func_dict = {
+'RepVGG-A0': create_RepVGG_A0,
+'RepVGG-A1': create_RepVGG_A1,
+'RepVGG-A2': create_RepVGG_A2,
+'RepVGG-B0': create_RepVGG_B0,
+'RepVGG-B1': create_RepVGG_B1,
+'RepVGG-B1g2': create_RepVGG_B1g2,
+'RepVGG-B1g4': create_RepVGG_B1g4,
+'RepVGG-B2': create_RepVGG_B2,
+'RepVGG-B2g2': create_RepVGG_B2g2,
+'RepVGG-B2g4': create_RepVGG_B2g4,
+'RepVGG-B3': create_RepVGG_B3,
+'RepVGG-B3g2': create_RepVGG_B3g2,
+'RepVGG-B3g4': create_RepVGG_B3g4,
+'RepVGG-D2se': create_RepVGG_D2se,      #   Updated at April 25, 2021. This is not reported in the CVPR paper.
+}
 def get_RepVGG_func_by_name(name):
     return func_dict[name]
+
+
+
+#   Use this for converting a RepVGG model or a bigger model with RepVGG as its component
+#   Use like this
+#   model = create_RepVGG_A0(deploy=False)
+#   train model or load weights
+#   repvgg_model_convert(model, save_path='repvgg_deploy.pth')
+#   If you want to preserve the original model, call with do_copy=True
+
+
+
+def repvgg_model_convert(model:torch.nn.Module, save_path=None, do_copy=True):
+    if do_copy:
+        model = copy.deepcopy(model)
+    for module in model.modules():
+        if hasattr(module, 'switch_to_deploy'):
+            module.switch_to_deploy()
+    if save_path is not None:
+        torch.save(model.state_dict(), save_path)
+    return model
